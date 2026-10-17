@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Fraunces", Georgia, "Times New Roman", serif;
+}
+
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-align: initial;
+  transform-origin: 0 0;
+  user-select: text;
+  z-index: 1;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.pdf-text-layer span,
+.pdf-text-layer br {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: text;
+}
+
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.pdf-text-layer .markedContent {
+  display: contents;
+}
+
+.pdf-text-layer ::selection {
+  background: rgb(37 99 235 / 25%);
+  color: transparent;
+}
+
+.pdf-night-page {
+  filter: invert(0.88) hue-rotate(180deg) brightness(0.85);
+}
+
+.pdf-highlight {
+  position: absolute;
+  display: block;
+  border-radius: 2px;
+}
+
+.pdf-highlight-yellow {
+  background: rgb(250 204 21 / 42%);
+}
+
+.pdf-highlight-green {
+  background: rgb(74 222 128 / 38%);
+}
+
+.pdf-highlight-blue {
+  background: rgb(96 165 250 / 38%);
+}
+
+.pdf-highlight-pink {
+  background: rgb(244 114 182 / 38%);
+}
