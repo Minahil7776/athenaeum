@@ -277,15 +277,19 @@ async function normalizeBookData(db: Db) {
   }
 }
 
-export async function createDb(): Promise<Db> {
+export async function createDb(options: { requireMongo?: boolean } = {}): Promise<Db> {
   const uri = process.env.MONGODB_URI?.trim();
   let db: Db | null = null;
+  if (options.requireMongo && !uri) {
+    throw new Error('MONGODB_URI is required in production to use persistent storage.');
+  }
   if (uri) {
     try {
       db = await createMongoDb(uri, process.env.MONGODB_DB || 'athenaeum');
       console.log('Connected to MongoDB');
     } catch (e) {
-      console.error('MongoDB connection failed, using local storage instead:', (e as Error).message);
+      console.error('MongoDB connection failed:', (e as Error).message);
+      if (options.requireMongo) throw e;
     }
   } else {
     console.log('MONGODB_URI not set, using local storage in ./data');

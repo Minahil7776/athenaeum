@@ -10,9 +10,23 @@ copy .env.example .env      (Mac/Linux: cp .env.example .env)
 npm run dev
 ```
 
-Open http://localhost:3000
+Open http://localhost:3000. The server uses port 3000 locally by default and binds
+to `0.0.0.0`; when deployed, it uses the `PORT` supplied by the hosting platform.
 
-Production: `npm run build` then `npm start`
+## Deploy
+
+Use a Node.js host that supports running a persistent web server. Configure:
+
+- **Build command:** `npm ci && npm run build`
+- **Start command:** `npm start`
+- **Environment:** Set `MONGODB_URI` to a reachable MongoDB connection string. Optionally
+  set `MONGODB_DB` (defaults to `athenaeum`). The host supplies `PORT`.
+
+The app serves both the built frontend and `/api` from the same server, so no separate
+frontend/API URLs or localhost URLs need to be configured. Production startup exits
+with an error if MongoDB is missing or unreachable rather than saving data to
+ephemeral local disk. Use a managed MongoDB service for persistent books, sessions,
+and uploaded PDFs.
 
 ## MongoDB
 
@@ -20,7 +34,8 @@ Open `.env` and paste your connection string into `MONGODB_URI`.
 Books, reading sessions and the PDF files themselves (GridFS) are stored in your database,
 so your library is the same on every device.
 
-If `MONGODB_URI` is empty the app stores everything in a local `data` folder instead.
+For local development, if `MONGODB_URI` is empty or unreachable the app stores everything
+in a local `data` folder instead. Production requires a working `MONGODB_URI`.
 Your 148 books are added automatically the first time the app starts on an empty database.
 
 ## Using it

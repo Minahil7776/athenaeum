@@ -7,12 +7,13 @@ import { createDb, BookDoc, BookResourceDoc, BookResourceType, SessionDoc, Shelf
 dotenv.config();
 
 const PORT = Number(process.env.PORT) || 3000;
+const isProduction = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
 const GENRES = ['fiction', 'history', 'psychology', 'science', 'philosophy', 'must_read', 'other'];
 const SHELVES: Shelf[] = ['reading', 'to-read', 'read'];
 const RESOURCE_TYPES: BookResourceType[] = ['video-essay', 'lecture', 'audiobook', 'research-paper'];
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-const db = await createDb();
+const db = await createDb({ requireMongo: isProduction });
 const app = express();
 app.use(express.json());
 
@@ -385,7 +386,7 @@ app.delete('/api/sessions/:id', async (req, res) => {
 
 /* ------------------------------ Frontend ------------------------------ */
 
-if (process.env.NODE_ENV === 'production') {
+if (isProduction) {
   const dist = path.resolve(process.cwd(), 'dist');
   app.use(express.static(dist));
   app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
