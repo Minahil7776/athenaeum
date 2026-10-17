@@ -13,20 +13,34 @@ npm run dev
 Open http://localhost:3000. The server uses port 3000 locally by default and binds
 to `0.0.0.0`; when deployed, it uses the `PORT` supplied by the hosting platform.
 
-## Deploy
+## Deploy to Vercel
 
-Use a Node.js host that supports running a persistent web server. Configure:
+The project root contains a Vercel Express entry point (`server.ts`). In Vercel, use
+the **Express** framework preset, the repository root as the project root, and
+`npm run build:vercel` as the build command. The included `vercel.json` selects the
+Express preset and rewrites frontend routes to the Vite-built `public/index.html`;
+API paths are excluded from that rewrite. Vercel serves built files in `public` as
+static assets, while the Express app handles `/api`.
 
-- **Build command:** `npm ci && npm run build`
-- **Start command:** `npm start`
-- **Environment:** Set `MONGODB_URI` to a reachable MongoDB connection string. Optionally
-  set `MONGODB_DB` (defaults to `athenaeum`). The host supplies `PORT`.
+Set these Vercel environment variables for each environment you deploy:
 
-The app serves both the built frontend and `/api` from the same server, so no separate
-frontend/API URLs or localhost URLs need to be configured. Production startup exits
-with an error if MongoDB is missing or unreachable rather than saving data to
-ephemeral local disk. Use a managed MongoDB service for persistent books, sessions,
-and uploaded PDFs.
+- `MONGODB_URI`: your MongoDB connection string. Required; keep it server-side and
+  do not prefix it with `VITE_`.
+- `MONGODB_DB`: optional database name; defaults to `athenaeum`.
+- `PORT`: do not set this to your website URL. Vercel manages function routing and
+  does not need the app to listen on a port. Locally, the server defaults to port
+  `3000` and honors `PORT` if you set a local port number.
+
+Production startup fails if MongoDB is missing or unreachable rather than using
+ephemeral local disk. Ensure your MongoDB provider allows connections from your
+Vercel deployment.
+
+The current PDF upload and download routes send the file body through a Vercel
+Function. Vercel limits function request and response bodies to 4.5 MB, so PDFs
+larger than that cannot be uploaded or read through these routes even though local
+GridFS storage supports larger files. Supporting larger PDFs on Vercel requires
+direct uploads/downloads through durable object storage (for example, Vercel Blob)
+instead of proxying the file through the function.
 
 ## MongoDB
 

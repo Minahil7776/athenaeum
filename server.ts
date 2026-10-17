@@ -7,7 +7,8 @@ import { createDb, BookDoc, BookResourceDoc, BookResourceType, SessionDoc, Shelf
 dotenv.config();
 
 const PORT = Number(process.env.PORT) || 3000;
-const isProduction = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
+const isVercel = process.env.VERCEL === '1';
+const isProduction = isVercel || process.env.NODE_ENV === 'production' || process.argv.includes('--production');
 const GENRES = ['fiction', 'history', 'psychology', 'science', 'philosophy', 'must_read', 'other'];
 const SHELVES: Shelf[] = ['reading', 'to-read', 'read'];
 const RESOURCE_TYPES: BookResourceType[] = ['video-essay', 'lecture', 'audiobook', 'research-paper'];
@@ -384,18 +385,24 @@ app.delete('/api/sessions/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found.' }));
+
 /* ------------------------------ Frontend ------------------------------ */
 
-if (isProduction) {
+if (isProduction && !isVercel) {
   const dist = path.resolve(process.cwd(), 'dist');
   app.use(express.static(dist));
   app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
-} else {
+} else if (!isVercel) {
   const { createServer } = await import('vite');
   const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
   app.use(vite.middlewares);
 }
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Athenaeum running on http://localhost:${PORT} (storage: ${db.mode})`);
-});
+export default app;
+
+if (!isVercel) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Athenaeum running on http://localhost:${PORT} (storage: ${db.mode})`);
+  });
+}
