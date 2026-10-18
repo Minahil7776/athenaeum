@@ -6,11 +6,11 @@
   "buildCommand": "npm run build:vercel",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "source": "/",
+      "destination": "/index.html"
     },
     {
-      "source": "/(.*)",
+      "source": "/:path((?!api/|api$|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]
