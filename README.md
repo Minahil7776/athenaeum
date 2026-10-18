@@ -15,14 +15,12 @@ to `0.0.0.0`; when deployed, it uses the `PORT` supplied by the hosting platform
 
 ## Deploy to Vercel
 
-The project root contains a Vercel Express entry point (`server.ts`). In Vercel, use
-the **Express** framework preset and the repository root as the project root. The
-included `vercel.json` runs `npm ci --include=dev` so build tools and TypeScript
-declarations in `devDependencies` are present even if production dependency
-omission is configured, then builds with `npm run build:vercel`. It also rewrites
-frontend routes to the Vite-built `public/index.html`; API paths are excluded from
-that rewrite. Vercel serves built files in `public` as static assets, while the
-Express app handles `/api`.
+The frontend is built with Vite and served from `dist` as static files. The
+`api/[...path].ts` Vercel function forwards `/api/*` requests to the Express app
+in `server.ts`. Use the **Vite** framework preset and the repository root as the
+project root. The included `vercel.json` builds with `npm run build` and rewrites
+client-side frontend routes to the Vite entry point without capturing API paths
+or static assets.
 
 Set these Vercel environment variables for each environment you deploy:
 

@@ -15,5 +15,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src", "server.ts", "db.ts", "src/vite-env.d.ts"]
+  "include": ["api", "src", "server.ts", "db.ts", "src/vite-env.d.ts"]
 }
