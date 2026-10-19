@@ -9,11 +9,12 @@ import { LogModal } from './components/LogModal';
 import { BookModal } from './components/BookModal';
 import { BookDetails } from './components/BookDetails';
 import { Vocabulary } from './components/Vocabulary';
+import { SearchBooks } from './components/SearchBooks';
 
 // The PDF engine is only downloaded when a book is opened
 const Reader = lazy(() => import('./components/Reader').then((m) => ({ default: m.Reader })));
 
-type Tab = 'library' | 'activity' | 'vocabulary';
+type Tab = 'library' | 'discover' | 'activity' | 'vocabulary';
 
 export default function App() {
   const [books, setBooks] = useState<Book[] | null>(null);
@@ -113,7 +114,7 @@ export default function App() {
           <div className="flex items-center gap-5 min-w-0">
             <span className="font-serif text-xl font-semibold tracking-tight">Athenaeum</span>
             <nav className="flex items-center gap-4 text-sm">
-              {(['library', 'activity', 'vocabulary'] as Tab[]).map((t) => (
+              {(['library', 'discover', 'activity', 'vocabulary'] as Tab[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => {
@@ -216,7 +217,7 @@ export default function App() {
             }}
             onLog={() => setLogFor({})}
           />
-        ) : (
+        ) : tab === 'vocabulary' ? (
           <Vocabulary
             books={books}
             entries={vocabulary}
@@ -229,6 +230,8 @@ export default function App() {
               await refresh();
             }}
           />
+        ) : (
+          <SearchBooks books={books} onAdd={refresh} />
         )}
       </main>
 
