@@ -35,11 +35,11 @@ Production startup fails if MongoDB is missing or unreachable rather than using
 ephemeral local disk. Ensure your MongoDB provider allows connections from your
 Vercel deployment.
 
-The current PDF upload and download routes send the file body through a Vercel
-Function. Vercel limits function request and response bodies to 4.5 MB, so PDFs
-larger than that cannot be uploaded or read through these routes even though local
-GridFS storage supports larger files. Supporting larger PDFs on Vercel requires
-direct uploads/downloads through durable object storage (for example, Vercel Blob)
+PDF uploads and in-app reading send the file body through a Vercel Function.
+Vercel limits function request and response bodies to 4.5 MB, so larger PDFs
+cannot be uploaded or read through these routes even though local GridFS storage
+supports larger files. Supporting larger PDFs on Vercel requires direct
+uploads/downloads through durable object storage (for example, Vercel Blob)
 instead of proxying the file through the function.
 
 ## MongoDB

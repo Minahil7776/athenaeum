@@ -16,12 +16,24 @@ const Reader = lazy(() => import('./components/Reader').then((m) => ({ default: 
 
 type Tab = 'library' | 'discover' | 'activity' | 'vocabulary';
 
+const TABS: Tab[] = ['library', 'discover', 'activity', 'vocabulary'];
+const ACTIVE_TAB_KEY = 'athenaeum:active-tab';
+
+function getInitialTab(): Tab {
+  try {
+    const savedTab = localStorage.getItem(ACTIVE_TAB_KEY);
+    return TABS.find((candidate) => candidate === savedTab) ?? 'library';
+  } catch {
+    return 'library';
+  }
+}
+
 export default function App() {
   const [books, setBooks] = useState<Book[] | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [vocabulary, setVocabulary] = useState<VocabularyEntry[]>([]);
   const [resources, setResources] = useState<BookResource[]>([]);
-  const [tab, setTab] = useState<Tab>('library');
+  const [tab, setTab] = useState<Tab>(getInitialTab);
   const [reading, setReading] = useState<Book | null>(null);
   const [logFor, setLogFor] = useState<{ bookId?: string } | null>(null);
   const [bookModal, setBookModal] = useState<{ book: Book | null } | null>(null);
@@ -50,6 +62,14 @@ export default function App() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ACTIVE_TAB_KEY, tab);
+    } catch {
+      // Keep the app usable when browser storage is unavailable.
+    }
+  }, [tab]);
 
   const run = async (fn: () => Promise<unknown>) => {
     try {

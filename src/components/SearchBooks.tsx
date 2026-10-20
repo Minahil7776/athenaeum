@@ -19,10 +19,6 @@ interface SearchResponse {
 	docs: SearchBook[];
 }
 
-interface ArchiveMetadata {
-	files?: { name?: string; format?: string; private?: string }[];
-}
-
 const SUGGESTED_SEARCHES = ['Jane Austen', 'The Art of War', 'poetry', 'psychology'];
 const PAGE_SIZE = 24;
 
@@ -35,7 +31,6 @@ export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Prom
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState('');
 	const [addingKey, setAddingKey] = useState('');
-	const [downloadingKey, setDownloadingKey] = useState('');
 
 	const search = async (term: string, nextPage = 0) => {
 		const cleanTerm = term.trim();
@@ -82,34 +77,6 @@ export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Prom
 			setError(cause instanceof Error ? cause.message : 'Could not add this book.');
 		} finally {
 			setAddingKey('');
-		}
-	};
-
-	const downloadBook = async (book: SearchBook) => {
-		const archiveId = book.ia?.[0];
-		if (!archiveId) return;
-		setDownloadingKey(book.key);
-		setError('');
-		try {
-			const response = await fetch(`https://archive.org/metadata/${encodeURIComponent(archiveId)}`);
-			if (!response.ok) throw new Error('Could not check available download formats.');
-			const metadata = (await response.json()) as ArchiveMetadata;
-			const file = metadata.files?.find((item) => {
-				const name = item.name?.toLowerCase() || '';
-				return item.private !== 'true' && (name.endsWith('.pdf') || name.endsWith('.epub'));
-			});
-			if (!file?.name) throw new Error('No public PDF or EPUB download is available for this edition.');
-			const link = document.createElement('a');
-			link.href = `https://archive.org/download/${encodeURIComponent(archiveId)}/${file.name.split('/').map(encodeURIComponent).join('/')}?download=1`;
-			link.download = '';
-			link.rel = 'noopener noreferrer';
-			document.body.appendChild(link);
-			link.click();
-			link.remove();
-		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : 'Could not start this download.');
-		} finally {
-			setDownloadingKey('');
 		}
 	};
 
@@ -202,7 +169,7 @@ export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Prom
 											<p className="mt-1 text-xs text-stone-500">
 												{book.first_publish_year || 'Publication year unknown'}
 												{book.edition_count ? ` · ${book.edition_count} ${book.edition_count === 1 ? 'edition' : 'editions'}` : ''}
-												{hasPublicAccess ? ' · Free to download' : book.ebook_access === 'borrowable' ? ' · Borrow online' : ''}
+												{hasPublicAccess ? ' · Public access' : book.ebook_access === 'borrowable' ? ' · Borrow online' : ''}
 											</p>
 										</div>
 										<div className="flex items-center gap-2 shrink-0">
@@ -214,23 +181,13 @@ export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Prom
 												{inLibrary ? <Check className="w-3.5 h-3.5" /> : addingKey === book.key ? <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> : <BookPlus className="w-3.5 h-3.5" />}
 												{inLibrary ? 'In library' : addingKey === book.key ? 'Adding' : 'Add to library'}
 											</button>
-											{hasPublicAccess && archiveId ? (
-												<button
-													onClick={() => void downloadBook(book)}
-													disabled={downloadingKey === book.key}
-													title="Download a public PDF or EPUB"
-													aria-label={`Download ${book.title}`}
-													className="inline-flex items-center justify-center w-9 h-9 text-white bg-emerald-800 rounded-lg hover:bg-emerald-700 disabled:opacity-50"
-												>
-													{downloadingKey === book.key ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <BookDown className="w-4 h-4" />}
-												</button>
-											) : archiveId ? (
+											{archiveId ? (
 												<a
-													href={`https://openlibrary.org${book.key}`}
+													href={`https://archive.org/details/${encodeURIComponent(archiveId)}`}
 													target="_blank"
 													rel="noreferrer"
-													title="View borrowing options"
-													aria-label={`View online access for ${book.title}`}
+													title="View this book on Internet Archive"
+													aria-label={`View ${book.title} on Internet Archive`}
 													className="inline-flex items-center justify-center w-9 h-9 text-stone-700 border border-stone-300 rounded-lg hover:bg-white"
 												>
 													<ExternalLink className="w-4 h-4" />
