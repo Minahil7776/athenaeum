@@ -20,6 +20,7 @@ export interface BookDoc {
   hasPdf: boolean;
   fileName: string | null;
   size: number;
+  blobUrl?: string | null;
   createdAt: string;
   lastReadAt: string | null;
   dateRead: string | null;

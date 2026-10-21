@@ -2,17 +2,29 @@ import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import crypto from 'crypto';
+import { del, head } from '@vercel/blob';
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { createDb, BookDoc, BookResourceDoc, BookResourceType, SessionDoc, Shelf, VocabularyDoc } from './db.js';
 
 dotenv.config();
 
 const PORT = Number(process.env.PORT) || 3000;
 const isVercel = process.env.VERCEL === '1';
+const isVercelDeployment = isVercel && ['production', 'preview'].includes(process.env.VERCEL_ENV ?? '');
 const isProduction = isVercel || process.env.NODE_ENV === 'production' || process.argv.includes('--production');
 const GENRES = ['fiction', 'history', 'psychology', 'science', 'philosophy', 'must_read', 'other'];
 const SHELVES: Shelf[] = ['reading', 'to-read', 'read'];
 const RESOURCE_TYPES: BookResourceType[] = ['video-essay', 'lecture', 'audiobook', 'research-paper'];
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_PDF_SIZE = 100 * 1024 * 1024;
+
+interface PdfUploadMetadata {
+  bookId: string;
+  existingBook: boolean;
+  fileName: string;
+  pages: number;
+  previousBlobUrl?: string | null;
+}
 
 const db = await createDb({ requireMongo: isProduction });
 const app = express();
@@ -40,7 +52,14 @@ function shelfAfterProgress(book: BookDoc, page: number, pages: number, day: str
   return set;
 }
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, storage: db.mode }));
+app.get('/api/health', (_req, res) =>
+  res.json({
+    ok: true,
+    storage: db.mode,
+    vercel: isVercelDeployment,
+    directPdfUploads: isVercelDeployment && Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+  })
+);
 
 /* ------------------------------- Books ------------------------------- */
 
@@ -74,6 +93,7 @@ app.post('/api/books', async (req, res) => {
     hasPdf: false,
     fileName: null,
     size: 0,
+    blobUrl: null,
     createdAt: new Date().toISOString(),
     lastReadAt: null,
     dateRead: null,
@@ -121,6 +141,8 @@ app.patch('/api/books/:id', async (req, res) => {
 });
 
 app.delete('/api/books/:id', async (req, res) => {
+  const book = await db.books.get(req.params.id);
+  if (book?.blobUrl) await del(book.blobUrl);
   await db.books.remove(req.params.id);
   await db.sessions.removeWhere('bookId', req.params.id);
   await db.resources.removeWhere('bookId', req.params.id);
@@ -212,8 +234,125 @@ app.delete('/api/vocabulary/:id', async (req, res) => {
 
 /* ------------------------------ PDF files ----------------------------- */
 
-// Raw PDF body. ?name=file.pdf  and optionally &bookId=... to attach to an existing book
-app.post('/api/upload', express.raw({ type: '*/*', limit: '300mb' }), async (req, res) => {
+function parsePdfUploadMetadata(payload: string | null): PdfUploadMetadata {
+  if (!payload) throw new Error('Missing PDF upload metadata.');
+  let value: unknown;
+  try {
+    value = JSON.parse(payload);
+  } catch {
+    throw new Error('Invalid PDF upload metadata.');
+  }
+  if (!value || typeof value !== 'object') throw new Error('Invalid PDF upload metadata.');
+  const metadata = value as Record<string, unknown>;
+  const bookId = str(metadata.bookId, 100);
+  const fileName = str(metadata.fileName, 200).split(/[\\/]/).pop() || '';
+  const pages = Number(metadata.pages);
+  if (
+    !bookId ||
+    !fileName ||
+    !/\.pdf$/i.test(fileName) ||
+    !Number.isInteger(pages) ||
+    pages < 1 ||
+    pages > 100000 ||
+    typeof metadata.existingBook !== 'boolean'
+  ) {
+    throw new Error('Invalid PDF upload details.');
+  }
+  return {
+    bookId,
+    existingBook: metadata.existingBook,
+    fileName,
+    pages,
+    previousBlobUrl: typeof metadata.previousBlobUrl === 'string' ? metadata.previousBlobUrl : null,
+  };
+}
+
+app.post('/api/upload', async (req, res, next) => {
+  if (!req.is('application/json')) return next();
+  if (!isVercelDeployment || !process.env.BLOB_READ_WRITE_TOKEN) {
+    return res.status(503).json({ error: 'Direct PDF uploads are not configured.' });
+  }
+  try {
+    const body: HandleUploadBody = req.body;
+    const result = await handleUpload({
+      body,
+      request: req,
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        if (!/^pdfs\/[0-9a-f-]{36}\.pdf$/i.test(pathname)) {
+          throw new Error('Invalid PDF upload path.');
+        }
+        const metadata = parsePdfUploadMetadata(clientPayload);
+        const book = await db.books.get(metadata.bookId);
+        if (metadata.existingBook && !book) throw new Error('Book not found.');
+        if (!metadata.existingBook && book) throw new Error('Book already exists.');
+        return {
+          allowedContentTypes: ['application/pdf'],
+          maximumSizeInBytes: MAX_PDF_SIZE,
+          tokenPayload: JSON.stringify({ ...metadata, previousBlobUrl: book?.blobUrl ?? null }),
+        };
+      },
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        if (blob.contentType !== 'application/pdf' || !/^pdfs\/[0-9a-f-]{36}\.pdf$/i.test(blob.pathname)) {
+          throw new Error('Uploaded file is not a PDF.');
+        }
+        const metadata = parsePdfUploadMetadata(tokenPayload ?? null);
+        const blobMetadata = await head(blob.url);
+        if (blobMetadata.size > MAX_PDF_SIZE) throw new Error('PDFs must be 100 MB or smaller.');
+        let book = await db.books.get(metadata.bookId);
+        if (metadata.existingBook) {
+          if (!book) throw new Error('Book not found.');
+          await db.books.update(book.id, {
+            set: {
+              hasPdf: true,
+              pages: metadata.pages,
+              fileName: metadata.fileName,
+              size: blobMetadata.size,
+              blobUrl: blob.url,
+            },
+          });
+          await db.removeFile(book.id);
+        } else if (!book) {
+          const title = metadata.fileName.replace(/\.pdf$/i, '').replace(/[_]+/g, ' ').trim() || 'Untitled';
+          book = {
+            id: metadata.bookId,
+            title,
+            author: '',
+            genre: 'other',
+            pages: metadata.pages,
+            rating: null,
+            year: null,
+            shelf: 'to-read',
+            currentPage: 0,
+            totalSeconds: 0,
+            notes: null,
+            hasPdf: true,
+            fileName: metadata.fileName,
+            size: blobMetadata.size,
+            blobUrl: blob.url,
+            createdAt: new Date().toISOString(),
+            lastReadAt: null,
+            dateRead: null,
+          };
+          await db.books.insert(book);
+        } else if (book.blobUrl !== blob.url) {
+          throw new Error('Book already exists.');
+        }
+        if (metadata.previousBlobUrl && metadata.previousBlobUrl !== blob.url) {
+          await del(metadata.previousBlobUrl);
+        }
+      },
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Could not process the PDF upload.' });
+  }
+});
+
+// Raw PDF body for local development. On Vercel, browser uploads use Blob directly.
+app.post('/api/upload', express.raw({ type: 'application/pdf', limit: '300mb' }), async (req, res) => {
+  if (isVercelDeployment) {
+    return res.status(413).json({ error: 'Configure Vercel Blob to upload PDFs on Vercel.' });
+  }
   const data = req.body as Buffer;
   if (!Buffer.isBuffer(data) || data.length < 5 || data.subarray(0, 5).toString() !== '%PDF-') {
     return res.status(400).json({ error: 'That file is not a valid PDF.' });
@@ -228,7 +367,7 @@ app.post('/api/upload', express.raw({ type: '*/*', limit: '300mb' }), async (req
     const pages = int(req.query.pages, 1, 100000, 0);
     if (!pages) return res.status(400).json({ error: 'Could not read the page count from this PDF.' });
     await db.putFile(book.id, data);
-    await db.books.update(book.id, { set: { hasPdf: true, pages, fileName, size: data.length } });
+    await db.books.update(book.id, { set: { hasPdf: true, pages, fileName, size: data.length, blobUrl: null } });
     return res.json({ ...book, hasPdf: true, pages, fileName, size: data.length });
   }
 
@@ -250,6 +389,7 @@ app.post('/api/upload', express.raw({ type: '*/*', limit: '300mb' }), async (req
     hasPdf: true,
     fileName,
     size: data.length,
+    blobUrl: null,
     createdAt: new Date().toISOString(),
     lastReadAt: null,
     dateRead: null,
@@ -261,6 +401,7 @@ app.post('/api/upload', express.raw({ type: '*/*', limit: '300mb' }), async (req
 
 app.get('/api/books/:id/file', async (req, res) => {
   const book = await db.books.get(req.params.id);
+  if (book?.hasPdf && book.blobUrl) return res.redirect(book.blobUrl);
   const stream = book?.hasPdf ? await db.openFile(req.params.id) : null;
   if (!book || !stream) return res.status(404).end();
   res.setHeader('Content-Type', 'application/pdf');

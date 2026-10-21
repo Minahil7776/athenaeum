@@ -35,18 +35,26 @@ Production startup fails if MongoDB is missing or unreachable rather than using
 ephemeral local disk. Ensure your MongoDB provider allows connections from your
 Vercel deployment.
 
-PDF uploads and in-app reading send the file body through a Vercel Function.
-Vercel limits function request and response bodies to 4.5 MB, so larger PDFs
-cannot be uploaded or read through these routes even though local GridFS storage
-supports larger files. Supporting larger PDFs on Vercel requires direct
-uploads/downloads through durable object storage (for example, Vercel Blob)
-instead of proxying the file through the function.
+Vercel Functions limit request and response bodies to 4.5 MB. On Vercel, PDFs
+are therefore uploaded directly from the browser to Vercel Blob and the reader
+is redirected to Blob for the file, so PDF bytes do not pass through a
+Function. In the Vercel project, create a **public** Blob store and connect it
+to the project for Production and Preview. Vercel adds `BLOB_READ_WRITE_TOKEN`;
+make sure it is available to the deployment. Local development continues to
+store PDFs using the configured database or local disk. Uploads are limited to
+100 MB.
+
+Blob URLs are public, just like the app's existing unauthenticated PDF route.
+PDFs already stored in MongoDB GridFS are not migrated automatically; if a
+legacy PDF is too large to read through the Function, upload it again after
+connecting Blob to replace it.
 
 ## MongoDB
 
 Open `.env` and paste your connection string into `MONGODB_URI`.
-Books, reading sessions and the PDF files themselves (GridFS) are stored in your database,
-so your library is the same on every device.
+Books and reading sessions are stored in your database, so your library is the
+same on every device. Local PDFs use MongoDB GridFS when MongoDB is configured,
+or local disk otherwise; Vercel PDFs use Blob.
 
 For local development, if `MONGODB_URI` is empty or unreachable the app stores everything
 in a local `data` folder instead. Production requires a working `MONGODB_URI`.

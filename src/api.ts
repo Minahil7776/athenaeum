@@ -1,3 +1,4 @@
+import { upload as uploadBlob } from '@vercel/blob/client';
 import { Book, BookResource, BookResourceType, Session, Genre, Shelf, VocabularyEntry } from './types';
 
 async function json<T>(res: Response): Promise<T> {
@@ -46,12 +47,42 @@ export const api = {
   deleteBook: (id: string) => send('DELETE', `/api/books/${encodeURIComponent(id)}`).then((r) => json<{ ok: boolean }>(r)),
 
   // Upload a PDF. With bookId it is attached to that book, otherwise a new book is created.
-  upload: (file: File, pages: number, bookId?: string) =>
-    fetch(`/api/upload?name=${encodeURIComponent(file.name)}&pages=${pages}${bookId ? `&bookId=${encodeURIComponent(bookId)}` : ''}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/pdf' },
-      body: file,
-    }).then((r) => json<Book>(r)),
+  upload: async (file: File, pages: number, bookId?: string) => {
+    const environment = await fetch('/api/health').then((r) =>
+      json<{ vercel: boolean; directPdfUploads: boolean }>(r)
+    );
+    if (environment.vercel) {
+      if (!environment.directPdfUploads) {
+        throw new Error('PDF uploads on Vercel require a connected Vercel Blob store.');
+      }
+      const targetBookId = bookId || crypto.randomUUID();
+      await uploadBlob(`pdfs/${crypto.randomUUID()}.pdf`, file, {
+        access: 'public',
+        contentType: 'application/pdf',
+        handleUploadUrl: '/api/upload',
+        clientPayload: JSON.stringify({
+          bookId: targetBookId,
+          existingBook: Boolean(bookId),
+          fileName: file.name,
+          pages,
+        }),
+        multipart: file.size > 5 * 1024 * 1024,
+      });
+      const uploaded = (await api.books()).find((book) => book.id === targetBookId && book.hasPdf);
+      if (!uploaded) {
+        throw new Error('The PDF uploaded, but the library was not updated. Refresh the page before retrying.');
+      }
+      return uploaded;
+    }
+    return fetch(
+      `/api/upload?name=${encodeURIComponent(file.name)}&pages=${pages}${bookId ? `&bookId=${encodeURIComponent(bookId)}` : ''}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: file,
+      }
+    ).then((r) => json<Book>(r));
+  },
   fileUrl: (id: string) => `/api/books/${encodeURIComponent(id)}/file`,
 
   logSession: (s: { bookId: string; day: string; startedAt: string; minutes: number; pagesRead: number }) =>
