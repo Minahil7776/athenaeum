@@ -4,6 +4,24 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 export const localDay = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+function isDay(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T12:00:00`);
+  return Number.isFinite(date.getTime()) && localDay(date) === value;
+}
+
+function sessionDay(session: Session): string | null {
+  if (isDay(session.day)) return session.day;
+  if (typeof session.startedAt !== 'string') return null;
+  const startedAt = new Date(session.startedAt);
+  return Number.isFinite(startedAt.getTime()) ? localDay(startedAt) : null;
+}
+
+function validSeconds(value: unknown): number {
+  const seconds = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+}
+
 export function addDays(day: string, delta: number): string {
   const d = new Date(day + 'T12:00:00');
   d.setDate(d.getDate() + delta);
@@ -31,8 +49,7 @@ export function formatClock(totalSeconds: number): string {
 export const timeOfDay = (iso: string) =>
   new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-export function dayLabel(day: string): string {
-  const t = localDay();
+export function dayLabel(day: string, t = localDay()): string {
   if (day === t) return 'Today';
   if (day === addDays(t, -1)) return 'Yesterday';
   return new Date(day + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
@@ -40,12 +57,15 @@ export function dayLabel(day: string): string {
 
 export function secondsByDay(sessions: Session[]): Map<string, number> {
   const m = new Map<string, number>();
-  for (const s of sessions) m.set(s.day, (m.get(s.day) || 0) + s.seconds);
+  for (const session of sessions) {
+    const day = sessionDay(session);
+    if (!day) continue;
+    m.set(day, (m.get(day) || 0) + validSeconds(session.seconds));
+  }
   return m;
 }
 
-export function summarize(byDay: Map<string, number>) {
-  const t = localDay();
+export function summarize(byDay: Map<string, number>, t = localDay()) {
   let today = 0,
     week = 0,
     month = 0,
@@ -61,10 +81,9 @@ export function summarize(byDay: Map<string, number>) {
   return { today, week, month, total };
 }
 
-/* A day counts toward the streak once at least one minute was read */
-export function streaks(byDay: Map<string, number>) {
-  const active = new Set([...byDay].filter(([, s]) => s >= 60).map(([d]) => d));
-  const t = localDay();
+/* Any positive reading time counts as an active day. */
+export function streaks(byDay: Map<string, number>, t = localDay()) {
+  const active = new Set([...byDay].filter(([day, seconds]) => isDay(day) && day <= t && validSeconds(seconds) > 0).map(([day]) => day));
   let current = 0;
   let cursor = active.has(t) ? t : addDays(t, -1);
   while (active.has(cursor)) {
@@ -83,22 +102,24 @@ export function streaks(byDay: Map<string, number>) {
   return { current, longest: Math.max(longest, current), activeDays: active.size };
 }
 
-export function lastNDays(byDay: Map<string, number>, n: number) {
-  const t = localDay();
+export function lastNDays(byDay: Map<string, number>, n: number, t = localDay()) {
   const out: { day: string; seconds: number }[] = [];
   for (let i = n - 1; i >= 0; i--) {
     const day = addDays(t, -i);
-    out.push({ day, seconds: byDay.get(day) || 0 });
+    out.push({ day, seconds: validSeconds(byDay.get(day)) });
   }
   return out;
 }
 
 export function groupSessionsByDay(sessions: Session[]) {
   const groups = new Map<string, Session[]>();
-  for (const s of sessions) {
-    const arr = groups.get(s.day) || [];
-    arr.push(s);
-    groups.set(s.day, arr);
+  for (const session of sessions) {
+    const day = sessionDay(session);
+    if (!day) continue;
+    const normalized = { ...session, day, seconds: validSeconds(session.seconds) };
+    const arr = groups.get(day) || [];
+    arr.push(normalized);
+    groups.set(day, arr);
   }
   return [...groups.entries()]
     .sort((a, b) => b[0].localeCompare(a[0]))

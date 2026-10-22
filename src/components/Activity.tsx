@@ -23,17 +23,19 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export function Activity({
   sessions,
+  today,
   onDelete,
   onLog,
 }: {
   sessions: Session[];
+  today: string;
   onDelete: (s: Session) => void;
   onLog: () => void;
 }) {
   const byDay = useMemo(() => secondsByDay(sessions), [sessions]);
-  const sum = useMemo(() => summarize(byDay), [byDay]);
-  const st = useMemo(() => streaks(byDay), [byDay]);
-  const bars = useMemo(() => lastNDays(byDay, 30), [byDay]);
+  const sum = useMemo(() => summarize(byDay, today), [byDay, today]);
+  const st = useMemo(() => streaks(byDay, today), [byDay, today]);
+  const bars = useMemo(() => lastNDays(byDay, 30, today), [byDay, today]);
   const groups = useMemo(() => groupSessionsByDay(sessions), [sessions]);
   const max = Math.max(60, ...bars.map((b) => b.seconds));
 
@@ -58,17 +60,17 @@ export function Activity({
             <div
               key={b.day}
               className="flex-1 h-full flex items-end"
-              title={`${dayLabel(b.day)}: ${formatDuration(b.seconds)}`}
+              title={`${dayLabel(b.day, today)}: ${formatDuration(b.seconds)}`}
             >
               <div
-                className={`w-full rounded-sm ${b.seconds >= 60 ? 'bg-stone-800' : 'bg-stone-100'}`}
+                className={`w-full rounded-sm ${b.seconds > 0 ? 'bg-stone-800' : 'bg-stone-100'}`}
                 style={{ height: b.seconds > 0 ? `${Math.max(4, (b.seconds / max) * 100)}%` : '3px' }}
               />
             </div>
           ))}
         </div>
         <div className="flex justify-between text-[10px] text-stone-400 mt-1.5">
-          <span>{dayLabel(bars[0].day)}</span>
+          <span>{dayLabel(bars[0].day, today)}</span>
           <span>Today</span>
         </div>
       </section>

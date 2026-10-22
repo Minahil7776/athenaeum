@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Flame, Upload, Clock } from 'lucide-react';
 import { api } from './api';
 import { Book, BookResource, BookResourceType, Session, Shelf, VocabularyEntry } from './types';
-import { secondsByDay, streaks } from './lib/stats';
+import { localDay, secondsByDay, streaks } from './lib/stats';
 import { Library } from './components/Library';
 import { Activity } from './components/Activity';
 import { LogModal } from './components/LogModal';
@@ -34,6 +34,7 @@ export default function App() {
   const [vocabulary, setVocabulary] = useState<VocabularyEntry[]>([]);
   const [resources, setResources] = useState<BookResource[]>([]);
   const [tab, setTab] = useState<Tab>(getInitialTab);
+  const [today, setToday] = useState(localDay);
   const [reading, setReading] = useState<Book | null>(null);
   const [logFor, setLogFor] = useState<{ bookId?: string } | null>(null);
   const [bookModal, setBookModal] = useState<{ book: Book | null } | null>(null);
@@ -62,6 +63,24 @@ export default function App() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const updateToday = () => {
+      const currentDay = localDay();
+      setToday((previousDay) => previousDay === currentDay ? previousDay : currentDay);
+    };
+    const updateTodayWhenVisible = () => {
+      if (document.visibilityState === 'visible') updateToday();
+    };
+    const interval = window.setInterval(updateToday, 60_000);
+    window.addEventListener('focus', updateToday);
+    document.addEventListener('visibilitychange', updateTodayWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', updateToday);
+      document.removeEventListener('visibilitychange', updateTodayWhenVisible);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -110,7 +129,7 @@ export default function App() {
     }
   };
 
-  const stats = useMemo(() => streaks(secondsByDay(sessions)), [sessions]);
+  const stats = useMemo(() => streaks(secondsByDay(sessions), today), [sessions, today]);
 
   if (reading) {
     return (
@@ -232,6 +251,7 @@ export default function App() {
         ) : tab === 'activity' ? (
           <Activity
             sessions={sessions}
+            today={today}
             onDelete={(s) => {
               if (window.confirm('Delete this reading session?')) run(() => api.deleteSession(s.id));
             }}

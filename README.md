@@ -76,5 +76,5 @@ Your 148 books are added automatically the first time the app starts on an empty
 - It pauses by itself after 2 minutes with no mouse, key, scroll or touch input.
 - Time and page are saved every 10 seconds, when you change tab, and when you close the reader.
 - Each reading session is stored with its day, start time, end time, seconds and pages.
-- A day counts toward your streak once you have read at least 1 minute.
+- Any positive reading time counts as an active streak day.
 - Opening a to-read book moves it to Reading. Reaching the last page moves it to Finished.
