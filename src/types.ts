@@ -16,6 +16,7 @@ export interface Book {
   hasPdf: boolean;
   fileName: string | null;
   size: number;
+  coverId?: number | null;
   blobUrl?: string | null;
   createdAt: string;
   lastReadAt: string | null;

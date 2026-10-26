@@ -116,29 +116,31 @@ const PdfPage = memo(function PdfPage({
     let pdfPage: pdfjs.PDFPageProxy | null = null;
 
     const renderPage = async () => {
-      if (!visible || rendering || cancelled || !pdfPage) return;
+      if (!visible || rendering || cancelled) return;
       const canvas = canvasRef.current;
       const textContainer = textLayerRef.current;
       if (!canvas || !textContainer) return;
       rendering = true;
-      const base = pdfPage.getViewport({ scale: 1 });
-      const availableWidth = Math.max(1, viewport.width - 32);
-      const availableHeight = Math.max(1, viewport.height - 32);
-      const widthScale = availableWidth / base.width;
-      const fitScale = Math.min(widthScale, availableHeight / base.height);
-      const scale = fitMode === 'width'
-        ? widthScale
-        : fitMode === 'custom'
-          ? (customFit === 'width' ? widthScale : fitScale) * zoom
-          : fitScale;
-      const pageViewport = pdfPage.getViewport({ scale });
-      setFrame({ width: pageViewport.width, height: pageViewport.height, scale });
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.floor(pageViewport.width * dpr);
-      canvas.height = Math.floor(pageViewport.height * dpr);
-      canvas.style.width = `${Math.floor(pageViewport.width)}px`;
-      canvas.style.height = `${Math.floor(pageViewport.height)}px`;
       try {
+        pdfPage ||= await doc.getPage(page);
+        if (cancelled || !visible) return;
+        const base = pdfPage.getViewport({ scale: 1 });
+        const availableWidth = Math.max(1, viewport.width - 32);
+        const availableHeight = Math.max(1, viewport.height - 32);
+        const widthScale = availableWidth / base.width;
+        const fitScale = Math.min(widthScale, availableHeight / base.height);
+        const scale = fitMode === 'width'
+          ? widthScale
+          : fitMode === 'custom'
+            ? (customFit === 'width' ? widthScale : fitScale) * zoom
+            : fitScale;
+        const pageViewport = pdfPage.getViewport({ scale });
+        setFrame({ width: pageViewport.width, height: pageViewport.height, scale });
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(pageViewport.width * dpr);
+        canvas.height = Math.floor(pageViewport.height * dpr);
+        canvas.style.width = `${Math.floor(pageViewport.width)}px`;
+        canvas.style.height = `${Math.floor(pageViewport.height)}px`;
         renderTask = pdfPage.render({
           canvas,
           canvasContext: canvas.getContext('2d')!,
@@ -164,25 +166,7 @@ const PdfPage = memo(function PdfPage({
       if (visible) void renderPage();
     }, { root: scrollRoot.current, rootMargin: '700px 0px', threshold: 0 });
 
-    doc.getPage(page).then((loadedPage) => {
-      if (cancelled) return;
-      pdfPage = loadedPage;
-      const base = loadedPage.getViewport({ scale: 1 });
-      const availableWidth = Math.max(1, viewport.width - 32);
-      const availableHeight = Math.max(1, viewport.height - 32);
-      const widthScale = availableWidth / base.width;
-      const fitScale = Math.min(widthScale, availableHeight / base.height);
-      const scale = fitMode === 'width'
-        ? widthScale
-        : fitMode === 'custom'
-          ? (customFit === 'width' ? widthScale : fitScale) * zoom
-          : fitScale;
-      const pageViewport = loadedPage.getViewport({ scale });
-      setFrame({ width: pageViewport.width, height: pageViewport.height, scale });
-      observer.observe(frameElement);
-    }).catch((error: Error) => {
-      if (!cancelled) onRenderError(error);
-    });
+    observer.observe(frameElement);
 
     return () => {
       cancelled = true;
@@ -603,19 +587,12 @@ export function Reader({
   const updateCurrentPage = () => {
     const container = wrapRef.current;
     if (!container) return;
-    const pages = Array.from(container.querySelectorAll<HTMLElement>('[data-pdf-page]'));
-    if (!pages.length) return;
-    const center = container.getBoundingClientRect().top + container.clientHeight / 2;
-    let current = pageRef.current;
-    let distance = Number.POSITIVE_INFINITY;
-    for (const pageElement of pages) {
-      const rect = pageElement.getBoundingClientRect();
-      const pageDistance = Math.abs(rect.top + rect.height / 2 - center);
-      if (pageDistance < distance) {
-        distance = pageDistance;
-        current = Number(pageElement.dataset.pdfPage);
-      }
-    }
+    const bounds = container.getBoundingClientRect();
+    const visiblePage = document.elementFromPoint(
+      bounds.left + bounds.width / 2,
+      bounds.top + container.clientHeight / 2
+    )?.closest<HTMLElement>('[data-pdf-page]');
+    const current = visiblePage ? Number(visiblePage.dataset.pdfPage) : pageRef.current;
     if (current !== pageRef.current) {
       pageRef.current = current;
       setPage(current);

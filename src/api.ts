@@ -25,6 +25,7 @@ export interface BookInput {
   genre: Genre;
   rating: number | null;
   year: number | null;
+  coverId?: number | null;
 }
 
 export const api = {

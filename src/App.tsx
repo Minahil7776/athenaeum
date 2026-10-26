@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Flame, Upload, Clock } from 'lucide-react';
+import { Flame, Upload, Clock, Compass, BookOpen, Activity as ActivityIcon, Languages } from 'lucide-react';
 import { api } from './api';
 import { Book, BookResource, BookResourceType, Session, Shelf, VocabularyEntry } from './types';
 import { localDay, secondsByDay, streaks } from './lib/stats';
@@ -39,6 +39,7 @@ export default function App() {
   const [logFor, setLogFor] = useState<{ bookId?: string } | null>(null);
   const [bookModal, setBookModal] = useState<{ book: Book | null } | null>(null);
   const [detailsBook, setDetailsBook] = useState<Book | null>(null);
+  const [discoverSearch, setDiscoverSearch] = useState({ query: '', key: 0 });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState<{ text: string; book: Book } | null>(null);
@@ -105,6 +106,11 @@ export default function App() {
     fileRef.current?.click();
   };
 
+  const saveCover = useCallback(async (bookId: string, coverId: number) => {
+    await api.updateBook(bookId, { coverId });
+    setBooks((current) => current?.map((book) => book.id === bookId ? { ...book, coverId } : book) ?? null);
+  }, []);
+
   const onFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const target = uploadTarget.current;
@@ -147,56 +153,72 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-30 bg-[#FBF9F5]/95 backdrop-blur border-b border-stone-200">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+    <div className="app-shell min-h-screen flex flex-col">
+      <header className="sticky top-0 z-30 border-b border-stone-200/80 bg-[#fbfaf7]/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center gap-5 min-w-0">
+            <span className="brand-mark"><BookOpen className="h-4 w-4" /></span>
             <span className="font-serif text-xl font-semibold tracking-tight">Athenaeum</span>
-            <nav className="flex items-center gap-4 text-sm">
-              {(['library', 'discover', 'activity', 'vocabulary'] as Tab[]).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => {
-                    setTab(t);
-                    setNotice(null);
-                  }}
-                  className={`pb-0.5 border-b-2 capitalize transition-colors ${
-                    tab === t
-                      ? 'border-stone-900 text-stone-900 font-medium'
-                      : 'border-transparent text-stone-500 hover:text-stone-900'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
+            <nav className="hidden items-center gap-1 text-sm sm:flex">
+              {(['library', 'discover', 'activity', 'vocabulary'] as Tab[]).map((t) => {
+                const NavIcon = t === 'library' ? BookOpen : t === 'discover' ? Compass : t === 'activity' ? ActivityIcon : Languages;
+                const label = t === 'library' ? 'My books' : t === 'discover' ? 'Discover' : t === 'activity' ? 'Activity' : 'Words';
+                return (
+                  <button
+                    key={t}
+                    onClick={() => {
+                      setTab(t);
+                      setNotice(null);
+                    }}
+                    className={`app-nav-link ${tab === t ? 'app-nav-link-active' : ''}`}
+                  >
+                    <NavIcon className="h-4 w-4" />
+                    {label}
+                  </button>
+                );
+              })}
             </nav>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
             <div
-              className="hidden sm:flex items-center gap-1.5 text-xs text-stone-600 mr-2 tabular-nums"
-              title="Consecutive days with at least 1 minute of reading"
+              className="hidden items-center gap-1.5 rounded-full bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 sm:flex"
+              title="Consecutive days with reading time"
             >
-              <Flame className="w-4 h-4 text-amber-600" />
+              <Flame className="h-4 w-4 text-amber-600" />
               <span>{stats.current} day streak</span>
             </div>
             <button
               onClick={() => setLogFor({})}
-              className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-stone-300 hover:bg-stone-100 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white/80 px-3 py-2 text-sm text-stone-700 shadow-sm transition hover:border-stone-300 hover:bg-white"
             >
-              <Clock className="w-4 h-4" />
+              <Clock className="h-4 w-4" />
               <span className="hidden sm:inline">Log time</span>
             </button>
             <button
               onClick={() => pickPdf()}
               disabled={busy}
-              className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-stone-900 text-white hover:bg-stone-700 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-900 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-800 disabled:opacity-50"
             >
-              <Upload className="w-4 h-4" />
+              <Upload className="h-4 w-4" />
               {busy ? 'Uploading...' : 'Upload PDF'}
             </button>
           </div>
         </div>
+        <nav className="flex items-center gap-1 overflow-x-auto px-4 pb-2 sm:hidden">
+          {(['library', 'discover', 'activity', 'vocabulary'] as Tab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => {
+                setTab(t);
+                setNotice(null);
+              }}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium ${tab === t ? 'bg-emerald-900 text-white' : 'text-stone-600 hover:bg-stone-100'}`}
+            >
+              {t === 'library' ? 'My books' : t === 'discover' ? 'Discover' : t === 'activity' ? 'Activity' : 'Words'}
+            </button>
+          ))}
+        </nav>
       </header>
 
       <input
@@ -208,9 +230,9 @@ export default function App() {
         onChange={(e) => onFiles(e.target.files)}
       />
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-8">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-7 sm:px-6 sm:py-9">
         {error && (
-          <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 flex justify-between gap-3">
+          <div className="mb-4 flex justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
             <span>{error}</span>
             <button onClick={() => setError('')} className="text-red-500 hover:text-red-800">
               Dismiss
@@ -218,9 +240,9 @@ export default function App() {
           </div>
         )}
         {notice && (
-          <div className="mb-4 text-sm text-stone-800 bg-white border border-stone-200 rounded-lg px-4 py-2.5 flex items-center justify-between gap-3">
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-800">
             <span>{notice.text}</span>
-            <span className="flex gap-3 shrink-0">
+            <span className="flex shrink-0 gap-3">
               <button onClick={() => setReading(notice.book)} className="font-medium underline underline-offset-2">
                 Read now
               </button>
@@ -232,7 +254,7 @@ export default function App() {
         )}
 
         {books === null ? (
-          <p className="text-sm text-stone-400">Loading...</p>
+          <p className="py-16 text-center text-sm text-stone-400">Loading your reading room...</p>
         ) : tab === 'library' ? (
           <Library
             books={books}
@@ -240,6 +262,11 @@ export default function App() {
             onRead={setReading}
             onOpenDetails={setDetailsBook}
             onUpload={pickPdf}
+            onCoverFound={saveCover}
+            onDiscover={(book) => {
+              setDiscoverSearch((search) => ({ query: book.title, key: search.key + 1 }));
+              setTab('discover');
+            }}
             onLog={(b) => setLogFor({ bookId: b.id })}
             onEdit={(b) => setBookModal({ book: b })}
             onAdd={() => setBookModal({ book: null })}
@@ -271,7 +298,7 @@ export default function App() {
             }}
           />
         ) : (
-          <SearchBooks books={books} onAdd={refresh} />
+          <SearchBooks key={discoverSearch.key} books={books} onAdd={refresh} initialQuery={discoverSearch.query} />
         )}
       </main>
 

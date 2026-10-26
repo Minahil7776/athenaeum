@@ -93,6 +93,7 @@ app.post('/api/books', async (req, res) => {
     hasPdf: false,
     fileName: null,
     size: 0,
+    coverId: Number.isSafeInteger(req.body?.coverId) && req.body.coverId > 0 ? req.body.coverId : null,
     blobUrl: null,
     createdAt: new Date().toISOString(),
     lastReadAt: null,
@@ -127,6 +128,12 @@ app.patch('/api/books/:id', async (req, res) => {
       return res.status(400).json({ error: 'Enter a valid publication year.' });
     }
     set.year = year;
+  }
+  if (b.coverId !== undefined) {
+    if (b.coverId !== null && (!Number.isSafeInteger(b.coverId) || b.coverId < 1)) {
+      return res.status(400).json({ error: 'Enter a valid book cover.' });
+    }
+    set.coverId = b.coverId;
   }
   if (b.shelf !== undefined && SHELVES.includes(b.shelf)) {
     set.shelf = b.shelf;
@@ -402,10 +409,32 @@ app.post('/api/upload', express.raw({ type: 'application/pdf', limit: '300mb' })
 app.get('/api/books/:id/file', async (req, res) => {
   const book = await db.books.get(req.params.id);
   if (book?.hasPdf && book.blobUrl) return res.redirect(book.blobUrl);
-  const stream = book?.hasPdf ? await db.openFile(req.params.id) : null;
+  if (!book?.hasPdf) return res.status(404).end();
+
+  const size = book.size;
+  let range: { start: number; end: number } | undefined;
+  if (size > 0) {
+    const requested = req.range(size);
+    if (requested === -1 || requested === -2 || (Array.isArray(requested) && requested.length !== 1)) {
+      res.setHeader('Content-Range', `bytes */${size}`);
+      return res.status(416).end();
+    }
+    if (Array.isArray(requested)) {
+      range = { start: requested[0].start, end: requested[0].end };
+    }
+    res.setHeader('Accept-Ranges', 'bytes');
+  }
+
+  const stream = await db.openFile(req.params.id, range);
   if (!book || !stream) return res.status(404).end();
   res.setHeader('Content-Type', 'application/pdf');
-  if (book.size) res.setHeader('Content-Length', String(book.size));
+  if (range) {
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${size}`);
+    res.setHeader('Content-Length', String(range.end - range.start + 1));
+  } else if (size > 0) {
+    res.setHeader('Content-Length', String(size));
+  }
   stream.on('error', () => res.end());
   stream.pipe(res);
 });

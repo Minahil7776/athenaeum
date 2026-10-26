@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { BookDown, BookPlus, Check, ExternalLink, LoaderCircle, Search } from 'lucide-react';
 import { api } from '../api';
 import { Book } from '../types';
@@ -22,8 +22,8 @@ interface SearchResponse {
 const SUGGESTED_SEARCHES = ['Jane Austen', 'The Art of War', 'poetry', 'psychology'];
 const PAGE_SIZE = 24;
 
-export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Promise<void> }) {
-	const [query, setQuery] = useState('');
+export function SearchBooks({ books, onAdd, initialQuery = '' }: { books: Book[]; onAdd: () => Promise<void>; initialQuery?: string }) {
+	const [query, setQuery] = useState(initialQuery);
 	const [submittedQuery, setSubmittedQuery] = useState('');
 	const [results, setResults] = useState<SearchBook[]>([]);
 	const [total, setTotal] = useState(0);
@@ -31,6 +31,10 @@ export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Prom
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState('');
 	const [addingKey, setAddingKey] = useState('');
+
+	useEffect(() => {
+		if (initialQuery.trim()) void search(initialQuery);
+	}, [initialQuery]);
 
 	const search = async (term: string, nextPage = 0) => {
 		const cleanTerm = term.trim();
@@ -71,6 +75,7 @@ export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Prom
 				genre: 'other',
 				rating: null,
 				year: book.first_publish_year || null,
+				coverId: book.cover_i || null,
 			});
 			await onAdd();
 		} catch (cause) {
@@ -92,10 +97,11 @@ export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Prom
 
 	return (
 		<section>
-			<div className="border-b border-stone-200 pb-6 mb-5">
+			<div className="discover-hero">
 				<p className="text-xs font-medium uppercase tracking-[0.12em] text-emerald-800">Open Library catalog</p>
-				<h1 className="font-serif text-3xl font-semibold mt-2">Find a book</h1>
-				<form onSubmit={submit} className="mt-5 flex gap-2 max-w-2xl">
+				<h1 className="mt-2 font-serif text-3xl font-semibold text-stone-900">A world of books, waiting.</h1>
+				<p className="mt-2 max-w-xl text-sm leading-6 text-stone-600">Search the catalog, add titles to your shelves, and explore legitimate reading or borrowing options.</p>
+				<form onSubmit={submit} className="mt-5 flex max-w-2xl gap-2">
 					<label className="relative flex-1 min-w-0">
 						<Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" aria-hidden="true" />
 						<input
@@ -103,13 +109,13 @@ export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Prom
 							onChange={(event) => setQuery(event.target.value)}
 							placeholder="Title, author, or subject"
 							aria-label="Search books"
-							className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-stone-300 rounded-lg focus:outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-700/15"
+							className="w-full rounded-xl border border-stone-300 bg-white/90 py-3 pl-9 pr-3 text-sm shadow-sm focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/15"
 						/>
 					</label>
 					<button
 						type="submit"
 						disabled={loading || !query.trim()}
-						className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-stone-900 rounded-lg hover:bg-stone-700 disabled:opacity-50"
+						className="inline-flex items-center gap-2 rounded-xl bg-emerald-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50"
 					>
 						{loading ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
 						Search
@@ -145,26 +151,26 @@ export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Prom
 				</div>
 			) : results.length > 0 ? (
 				<>
-					<ul className="divide-y divide-stone-200 border-y border-stone-200">
+					<ul className="discover-grid">
 						{results.map((book) => {
 							const inLibrary = existingBook(book);
 							const hasPublicAccess = book.ebook_access === 'public' && Boolean(book.ia?.length);
 							const archiveId = book.ia?.[0];
 							return (
-								<li key={book.key} className="flex gap-4 py-4 sm:py-5">
-									<div className="w-[68px] h-[96px] sm:w-[76px] sm:h-[108px] shrink-0 bg-stone-100 border border-stone-200 rounded overflow-hidden flex items-center justify-center">
+								<li key={book.key} className="discover-card">
+									<div className="discover-cover">
 										{book.cover_i ? (
 											<img
 												src={`https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg`}
 												alt={`Cover of ${book.title}`}
 												loading="lazy"
-												className="w-full h-full object-cover"
+												className="h-full w-full object-cover"
 											/>
-										) : <BookDown className="w-6 h-6 text-stone-300" aria-hidden="true" />}
+										) : <BookDown className="h-8 w-8 text-stone-300" aria-hidden="true" />}
 									</div>
-									<div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+									<div className="discover-card-body">
 										<div className="min-w-0">
-											<h2 className="font-serif text-base font-semibold leading-snug">{book.title}</h2>
+											<h2 className="line-clamp-2 font-serif text-base font-semibold leading-snug">{book.title}</h2>
 											<p className="mt-1 text-sm text-stone-600 truncate">{book.author_name?.slice(0, 2).join(', ') || 'Unknown author'}</p>
 											<p className="mt-1 text-xs text-stone-500">
 												{book.first_publish_year || 'Publication year unknown'}
@@ -172,27 +178,40 @@ export function SearchBooks({ books, onAdd }: { books: Book[]; onAdd: () => Prom
 												{hasPublicAccess ? ' · Public access' : book.ebook_access === 'borrowable' ? ' · Borrow online' : ''}
 											</p>
 										</div>
-										<div className="flex items-center gap-2 shrink-0">
+										<div className="discover-actions">
 											<button
 												onClick={() => void addToLibrary(book)}
 												disabled={inLibrary || addingKey === book.key}
-												className="inline-flex items-center justify-center gap-1.5 min-h-9 px-3 text-xs font-medium border border-stone-300 rounded-lg hover:bg-white disabled:text-stone-500 disabled:bg-stone-100"
+												className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-stone-300 px-3 text-xs font-medium hover:bg-white disabled:bg-stone-100 disabled:text-stone-500"
 											>
 												{inLibrary ? <Check className="w-3.5 h-3.5" /> : addingKey === book.key ? <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> : <BookPlus className="w-3.5 h-3.5" />}
 												{inLibrary ? 'In library' : addingKey === book.key ? 'Adding' : 'Add to library'}
 											</button>
-											{archiveId ? (
+											{archiveId && (hasPublicAccess || book.ebook_access === 'borrowable') ? (
 												<a
 													href={`https://archive.org/details/${encodeURIComponent(archiveId)}`}
 													target="_blank"
 													rel="noreferrer"
-													title="View this book on Internet Archive"
-													aria-label={`View ${book.title} on Internet Archive`}
-													className="inline-flex items-center justify-center w-9 h-9 text-stone-700 border border-stone-300 rounded-lg hover:bg-white"
+													title={hasPublicAccess ? 'Read or download this public-domain edition' : 'Borrow this book from Internet Archive'}
+													aria-label={`${hasPublicAccess ? 'Read or download' : 'Borrow'} ${book.title} on Internet Archive`}
+													className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-medium text-emerald-900 hover:bg-emerald-100"
 												>
-													<ExternalLink className="w-4 h-4" />
+													<ExternalLink className="w-3.5 h-3.5" />
+													{hasPublicAccess ? 'Read online' : 'Borrow'}
 												</a>
-											) : null}
+											) : (
+												<a
+													href={`https://openlibrary.org${book.key}`}
+													target="_blank"
+													rel="noreferrer"
+													title="Find reading and borrowing options"
+													aria-label={`Find a copy of ${book.title}`}
+													className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-stone-300 px-3 text-xs font-medium text-stone-700 hover:bg-white"
+												>
+													<ExternalLink className="w-3.5 h-3.5" />
+													Find a copy
+												</a>
+											)}
 										</div>
 									</div>
 								</li>

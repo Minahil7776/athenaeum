@@ -64,8 +64,16 @@ Your 148 books are added automatically the first time the app starts on an empty
 
 - **Upload PDF** (top right) adds a new book from a PDF. Each book row also has its own
   **Upload PDF** button; once a PDF is attached the button becomes **Read** / **Continue**.
+- **My books** shows your shelves as a cover gallery. For books without a PDF, choose
+  **Find a copy** to search Open Library and explore available public-domain or borrowing
+  options. Availability and download permissions depend on each book's rights.
+- **Discover** searches Open Library; add a result to your library to keep its cover and
+  publication details with your book. Existing books with a PDF look up matching covers
+  as you browse; successfully matched covers are saved with the book.
 - **Reader**: arrow keys or the page box to move, zoom buttons, pause button for the timer.
-  It resumes on the page where you stopped.
+  It resumes on the page where you stopped. Pages render as they approach the viewport,
+  and local/MongoDB PDFs use byte-range requests so opening a large book does not require
+  downloading and rendering every page first.
 - **Log time** records time for hardcopy books or reading done elsewhere (date, start time, minutes).
 - **Activity** shows today / 7 days / 30 days / all time, a 30-day chart, your streak,
   and every session grouped by day with its start and end time. Sessions can be deleted.

@@ -20,6 +20,7 @@ export interface BookDoc {
   hasPdf: boolean;
   fileName: string | null;
   size: number;
+  coverId?: number | null;
   blobUrl?: string | null;
   createdAt: string;
   lastReadAt: string | null;
@@ -81,7 +82,7 @@ export interface Db {
   vocabulary: Col<VocabularyDoc>;
   resources: Col<BookResourceDoc>;
   putFile(id: string, data: Buffer): Promise<void>;
-  openFile(id: string): Promise<Readable | null>;
+  openFile(id: string, range?: { start: number; end: number }): Promise<Readable | null>;
   removeFile(id: string): Promise<void>;
 }
 
@@ -155,9 +156,11 @@ async function createMongoDb(uri: string, dbName: string): Promise<Db> {
         up.end(data);
       });
     },
-    async openFile(id) {
+    async openFile(id, range) {
       const files = await bucket.find({ filename: id }).limit(1).toArray();
-      return files.length ? bucket.openDownloadStreamByName(id) : null;
+      return files.length
+        ? bucket.openDownloadStreamByName(id, range ? { start: range.start, end: range.end + 1 } : {})
+        : null;
     },
     removeFile,
   };
@@ -236,9 +239,9 @@ function createLocalDb(): Db {
     async putFile(id, buf) {
       fs.writeFileSync(filePath(id), buf);
     },
-    async openFile(id) {
+    async openFile(id, range) {
       const f = filePath(id);
-      return fs.existsSync(f) ? fs.createReadStream(f) : null;
+      return fs.existsSync(f) ? fs.createReadStream(f, range) : null;
     },
     async removeFile(id) {
       fs.rmSync(filePath(id), { force: true });
